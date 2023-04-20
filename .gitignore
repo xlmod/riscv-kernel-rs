@@ -1,0 +1,4 @@
+kernel.elf
+target/*
+Cargo.lock
+hdd.dsk
