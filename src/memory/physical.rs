@@ -1,4 +1,4 @@
-use core::{ops, fmt};
+use core::{fmt, ops};
 
 use super::page;
 
@@ -163,23 +163,42 @@ impl ops::SubAssign<u64> for PhysAddr {
 pub struct PhysFrame {
     addr: PhysAddr,
     page_type: page::PageType,
+    size: usize,
 }
 
 impl PhysFrame {
-    pub fn new(addr: PhysAddr, page_type: page::PageType) -> Self {
-        PhysFrame { addr, page_type }
+    pub fn new(addr: PhysAddr, page_type: page::PageType, size: usize) -> Self {
+        PhysFrame {
+            addr,
+            page_type,
+            size,
+        }
     }
 }
 
 impl fmt::Display for PhysFrame {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "PhysFrame:\r\n\t{}\r\n\t{}", self.addr, self.page_type)
+        write!(
+            f,
+            "PhysFrame{{ {}, {}K }}",
+            self.addr,
+            self.page_type.get_nb_pages() * self.size * page::PAGE_SIZE
+        )
     }
 }
 
 // ///////////////////////////////////
 // Physical Frame Allocator
 // ///////////////////////////////////
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PhysFrameAllocError(&'static str);
+
+impl fmt::Display for PhysFrameAllocError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "PhysAllocError{{ {} }}", self.0)
+    }
+}
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct PhysFrameAllocator {
@@ -190,24 +209,31 @@ pub struct PhysFrameAllocator {
 }
 
 impl PhysFrameAllocator {
+    /// # Safety
+    /// `ptr` have to point to a valid and accesible zone of size `memsize`
     pub unsafe fn new(start_addr: PhysAddr, ptr: *const u8, memsize: usize) -> Self {
         let nb_pages = memsize / page::PAGE_SIZE;
         let ptr_entries = &mut [ptr as usize, nb_pages / 8] as *mut _ as *mut &mut [u8];
-        Self { start_addr, bitmap: *ptr_entries, nb_pages, free_pages: nb_pages}
+        Self {
+            start_addr,
+            bitmap: *ptr_entries,
+            nb_pages,
+            free_pages: nb_pages,
+        }
     }
 
-    /// Return the first PhysFrame free and alloc
-    pub unsafe fn alloc(&mut self, page_type: page::PageType) -> Option<PhysFrame> {
-        let nb_pages: usize = match page_type {
-            page::PageType::Page => 1,
-            page::PageType::MegaPage => 512,
-            page::PageType::GigaPage => 512 * 512,
-        };
+    /// Allocate `nb` pages of type `page_type` and return a `PhysFrame` or `PhysAllocError`
+    /// # Safety
+    pub unsafe fn alloc(
+        &mut self,
+        page_type: page::PageType,
+        nb: usize,
+    ) -> Result<PhysFrame, PhysFrameAllocError> {
+        let nb_pages: usize = page_type.get_nb_pages() * nb;
         if nb_pages > self.nb_pages {
-            return None;
+            return Err(PhysFrameAllocError("Not enought memory!"));
         }
         let mut index: usize = 0;
-
         while index < self.nb_pages {
             let mut n = 0;
             let mut i;
@@ -220,13 +246,17 @@ impl PhysFrameAllocator {
             }
             if n == nb_pages {
                 for j in 0..nb_pages {
-                    self.bitmap[(index + j) / 8] |= 1 << ((index + j)  % 8);
+                    self.bitmap[(index + j) / 8] |= 1 << ((index + j) % 8);
                 }
                 self.free_pages -= nb_pages;
-                return Some(PhysFrame::new(self.start_addr + (page::PAGE_SIZE * index) as u64, page_type));
+                return Ok(PhysFrame::new(
+                    self.start_addr + (page::PAGE_SIZE * index) as u64,
+                    page_type,
+                    nb,
+                ));
             }
             index += nb_pages;
         }
-        None
-    } 
+        Err(PhysFrameAllocError("Not enought contiguous memory!"))
+    }
 }

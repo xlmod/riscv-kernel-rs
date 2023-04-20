@@ -1,5 +1,4 @@
-
-use core::{ops, fmt};
+use core::{fmt, ops};
 
 use super::physical::PhysAddr;
 
@@ -24,6 +23,17 @@ pub enum PageType {
     GigaPage,
 }
 
+impl PageType {
+    /// Return the number of 4K pages in the page type
+    pub fn get_nb_pages(&self) -> usize {
+        match self {
+            PageType::Page => 1,
+            PageType::MegaPage => 512,
+            PageType::GigaPage => 512 * 512,
+        }
+    }
+}
+
 impl fmt::Display for PageType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -46,7 +56,7 @@ pub struct PageTable<'a> {
 impl<'a> PageTable<'a> {
     /// Return a PageTable from a pointer that point on the page table
     /// # Safety
-    /// `ptr` must point on a valid page table and be align to 4K 
+    /// `ptr` must point on a valid page table and be align to 4K
     pub unsafe fn from_ptr(ptr: *const u8) -> Self {
         let ptr_entries = &mut [ptr as usize, 512] as *mut _ as *mut &mut [PageTableEntry];
         Self {
