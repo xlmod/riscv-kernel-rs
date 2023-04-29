@@ -1,4 +1,10 @@
 use core::fmt::{Error, Write};
+use lazy_static::lazy_static;
+use spin::Mutex;
+
+lazy_static! {
+    pub static ref UART: Mutex<Uart> = Mutex::new(Uart::new(crate::MMIO_UART_ADDR));
+}
 
 pub struct Uart {
     base_address: usize,

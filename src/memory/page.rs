@@ -144,7 +144,7 @@ impl PageTableEntry {
 
     /// Return an Option to a PageTable pointed by the physical address of the entry.
     unsafe fn get_next_level_table(&self) -> Option<PageTable> {
-        self.is_leaf()
+        (self.is_valid() && !self.is_leaf())
             .then_some(PageTable::from_ptr(self.get_physaddr().get_ptr()))
     }
 }

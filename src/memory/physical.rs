@@ -1,8 +1,19 @@
 use core::{fmt, ops};
+use lazy_static::lazy_static;
+use spin::Mutex;
 
 use super::page;
 
 const PHYSADDR_MAX: u64 = 0xff_ffff_ffff_ffff;
+
+lazy_static! {
+ pub static ref PHYSFRAMEALLOCATOR: Mutex<PhysFrameAllocator> = Mutex::new(unsafe {
+    PhysFrameAllocator::new(
+        crate::TEXT_START,
+        crate::HEAP_START.get_ptr(),
+        (crate::MEMORY_END - crate::MEMORY_START).get_u64() as usize)
+    });
+}
 
 // ///////////////////////////////////
 // Physical Address
@@ -21,6 +32,16 @@ impl PhysAddr {
     /// `0xdead_beef -> clear_nth_last_bit(12) -> 0xdead_b000`
     pub fn clear_nth_last_bit(&self, n: usize) -> Self {
         Self(self.0 & (PHYSADDR_MAX << n) & PHYSADDR_MAX)
+    }
+
+    /// Get page offset
+    pub fn get_page_offset(&self) -> u64 {
+        self.0 & page::PAGE_OFFSET_4K
+    }
+
+    /// Get the PPN (Physical Page Number)
+    pub fn get_ppn(&self) -> u64 {
+        self.0 >> 12
     }
 
     pub fn get_ptr(&self) -> *const u8 {

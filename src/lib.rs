@@ -9,9 +9,8 @@ macro_rules! print
 {
 	($($args:tt)+) => ({
         use core::fmt::Write;
-        use $crate::drivers::uart::Uart;
-        use $crate::MMIO_UART_ADDR;
-        let _ = write!(Uart::new(MMIO_UART_ADDR), $($args)+);
+        use $crate::drivers::uart::UART;
+        let _ = write!(UART.lock(), $($args)+);
 	});
 }
 #[macro_export]
@@ -86,15 +85,16 @@ extern "C" {
 #[no_mangle]
 extern "C" fn kmain() {
     println!("############################### START ###############################");
+    use memory::physical::PHYSFRAMEALLOCATOR;
 
     unsafe {
-        let mut phys_alloc = memory::physical::PhysFrameAllocator::new(
-            TEXT_START,
-            HEAP_START.get_ptr(),
-            (MEMORY_END - MEMORY_START).get_u64() as usize,
-        );
-
-        match phys_alloc.alloc(memory::page::PageType::Page, 8096) {
+        match PHYSFRAMEALLOCATOR.lock().alloc(memory::page::PageType::Page, 8096) {
+            Ok(pf) => {
+                println!("{}", pf);
+            }
+            Err(err) => println!("{}", err),
+        }
+        match PHYSFRAMEALLOCATOR.lock().alloc(memory::page::PageType::MegaPage, 8) {
             Ok(pf) => {
                 println!("{}", pf);
             }
